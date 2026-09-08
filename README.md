@@ -1,5 +1,3 @@
-Markdown
-
 # Advanced Full-Stack Reminder Application
 
 A modern, containerized full-stack reminder system that allows users to schedule automated email reminders using Node.js, Express, Nodemailer, React, and Vite, fully orchestrated via Docker Compose.
