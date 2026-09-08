@@ -39,7 +39,7 @@ my-reminder-app/
     │   └── App.js      # Main frontend UI component
     ├── package.json    # Frontend dependencies
     └── Dockerfile      # Frontend container configuration
-
+```
 Configuration (.env)
 
 Make sure you have a .env file in your root folder with your Gmail app credentials:
