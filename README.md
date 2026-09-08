@@ -45,7 +45,6 @@ my-reminder-app/
 Configuration (.env)
 
 Make sure you have a .env file in your root folder with your Gmail app credentials:
-Απόσπασμα κώδικα
 
 PORT=5000
 EMAIL_USER=your-email@gmail.com
