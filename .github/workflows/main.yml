@@ -42,22 +42,22 @@ jobs:
           push: true
           tags: ghcr.io/${{ env.owner }}/reminder-frontend:latest
 
-      - name: 6. Copy K8s manifests to AWS Server via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: 16.171.139.5
-          username: ec2-user
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "k8s/"
-          target: "/home/ec2-user/app"
-
-      - name: 7. Deploy to AWS K3s Cluster via SSH
+      - name: 6. Deploy & Pull latest code directly on AWS Server via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 16.171.139.5
           username: ec2-user
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # Δημιουργία ή ενημέρωση του φάκελου στον server
+            if [ -d "/home/ec2-user/googlediary" ]; then
+              cd /home/ec2-user/googlediary
+              git pull origin main
+            else
+              git clone https://github.com/${{ github.repository }}.git /home/ec2-user/googlediary
+              cd /home/ec2-user/googlediary
+            fi
+
             # Δημιουργία K3s Secret για το GHCR
             sudo /usr/local/bin/k3s kubectl create secret docker-registry ghcr-secret \
               --docker-server=ghcr.io \
@@ -65,11 +65,10 @@ jobs:
               --docker-password=${{ secrets.GITHUB_TOKEN }} \
               --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
 
-            # Εφαρμογή του deployment.yaml από τον φάκελο που μεταφέραμε
-            cd /home/ec2-user/app
+            # Αντικατάσταση του GITHUB_USERNAME και Apply τα Kubernetes manifests
             sed -i "s/GITHUB_USERNAME/${{ env.owner }}/g" k8s/deployment.yaml
             sudo /usr/local/bin/k3s kubectl apply -f k8s/deployment.yaml
             
-            # Restart τα deployments
+            # Restart τα deployments για να τραβήξουν τα νέα images
             sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-backend
             sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-frontend
