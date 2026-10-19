@@ -4,7 +4,6 @@ on:
   push:
     branches: [ "main" ]
 
-# Permissions για να ανεβαίνουν αυτόματα τα images στο GHCR χωρίς Docker Hub
 permissions:
   contents: read
   packages: write
@@ -28,7 +27,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: 4. Build and Push Backend Image
         uses: docker/build-push-action@v5
@@ -54,13 +53,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-
-            # 1. Fix Permissions στον φάκελο του ec2-user
             sudo chown -R ec2-user:ec2-user /home/ec2-user
             mkdir -p /home/ec2-user/app
             chmod -R 755 /home/ec2-user/app
 
-            # 2. Αυτόματο 2GB Swap (αν δεν υπάρχει ήδη)
             if [ ! -f /swapfile ]; then
               sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
               sudo chmod 600 /swapfile
@@ -69,25 +65,21 @@ jobs:
               echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
             fi
 
-            # 3. Αυτόματη εγκατάσταση K3s με σωστά permissions (644) αν δεν υπάρχει!
             if [ ! -f /usr/local/bin/k3s ]; then
               curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb --disable metrics-server --write-kubeconfig-mode 644" sh -
               sleep 10
             fi
 
-            # Εξασφάλιση ότι ο ec2-user έχει πάντα δικαίωμα ανάγνωσης στο K3s config
             sudo chmod 644 /etc/rancher/k3s/k3s.yaml
 
-            # 4. Δημιουργία K3s Secret για να τραβάει images από το GHCR
+            # Δημιουργία Secret με το GHCR_PAT για να μην ξαναβγάλει ImagePullBackOff
             sudo /usr/local/bin/k3s kubectl create secret docker-registry ghcr-secret \
               --docker-server=ghcr.io \
               --docker-username=${{ github.actor }} \
-              --docker-password=${{ secrets.GITHUB_TOKEN }} \
+              --docker-password=${{ secrets.GHCR_PAT }} \
               --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
 
-            # 5. Deploy το deployment.yaml απευθείας στη μνήμη (χωρίς SCP!)
             echo "${{ env.K8S_MANIFEST_B64 }}" | base64 -d | sudo /usr/local/bin/k3s kubectl apply -f -
 
-            # 6. Restart τα pods για να πάρουν την τελευταία έκδοση
             sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-backend
             sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-frontend
