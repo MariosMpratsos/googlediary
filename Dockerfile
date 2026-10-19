@@ -9,6 +9,6 @@ RUN npm install
 # Copy backend source code (including server.js)
 COPY . .
 
-EXPOSE 5000
+EXPOSE 4022
 
 CMD ["node", "server.js"]

@@ -1,24 +1,59 @@
-# Logs
-logs
-*.log
+# ---------- Secrets (never commit) ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+contabo_deploy*
+secrets.yml
+secrets.yaml
+
+# ---------- Node ----------
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+.npm/
+.eslintcache
 
-node_modules
-dist
-dist-ssr
-*.local
+# ---------- Build output ----------
+dist/
+build/
+coverage/
+.vite/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# ---------- Logs & temp ----------
+*.log
+logs/
+tmp/
+*.tmp
+
+# ---------- OS / editor ----------
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---------- Docker ----------
+docker-compose.override.yml
+
+# ---------- Terraform ----------
+# (commit .terraform.lock.hcl on purpose: it pins provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+
+# ---------- Ansible / Kubernetes ----------
+*.retry
+kubeconfig/*
+!kubeconfig/.gitignore
+*.kubeconfig
+k3s.yaml
