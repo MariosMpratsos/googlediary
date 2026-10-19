@@ -1,25 +1,27 @@
-- name: Configure AWS EC2 (1GB RAM Optimization) & Install K3s
-  hosts: aws_ec2
+---
+- name: Setup AWS EC2 with Encrypted K3s and Swap
+  hosts: all
   become: yes
   tasks:
-    - name: Create 2GB Swap File to prevent Out-Of-Memory (OOM) crashes
+    - name: 1. Create 2GB Swap file (Prevent Out-Of-Memory on t3.micro)
       shell: |
-        dd if=/dev/zero of=/swapfile bs=1M count=2048
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-        echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+        if [ ! -f /swapfile ]; then
+          dd if=/dev/zero of=/swapfile bs=1M count=2048
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+        fi
       args:
         creates: /swapfile
 
-    - name: Install K3s in Ultra-Light Mode (Saves ~200MB RAM)
-      shell: |
-        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb --disable metrics-server --write-kubeconfig-mode 644" sh -
-      args:
-        creates: /usr/local/bin/k3s
+    - name: 2. Fix home directory permissions for ec2-user
+      file:
+        path: /home/ec2-user
+        owner: ec2-user
+        group: ec2-user
+        recurse: yes
 
-    - name: Ensure K3s service is running and enabled on boot
-      systemd:
-        name: k3s
-        state: started
-        enabled: yes
+    - name: 3. Install K3s with Secrets Encryption at Rest enabled
+      shell: |
+        curl -sfL

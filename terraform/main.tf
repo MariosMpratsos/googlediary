@@ -1,20 +1,10 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "aws" {
-  region = "eu-north-1" # Στοκχόλμη (εκεί που είναι το 16.171.139.5)
+  region = "eu-north-1"
 }
 
-# Security Group που ανοίγει τις πόρτες για SSH, K3s, Frontend & Backend
-resource "aws_security_group" "k3s_devops_sg" {
-  name        = "k3s-devops-portfolio-sg"
-  description = "Allow SSH, K3s API, and NodePort traffic for Frontend & Backend"
+resource "aws_security_group" "k3s_sg" {
+  name        = "k3s-reminder-sg"
+  description = "Allow SSH, HTTP, HTTPS and K3s NodePorts"
 
   ingress {
     description = "SSH"
@@ -25,15 +15,23 @@ resource "aws_security_group" "k3s_devops_sg" {
   }
 
   ingress {
-    description = "K3s Kubernetes API"
-    from_port   = 6443
-    to_port     = 6443
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description = "Frontend Nginx NodePort"
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Frontend HTTP NodePort"
     from_port   = 30173
     to_port     = 30173
     protocol    = "tcp"
@@ -41,7 +39,15 @@ resource "aws_security_group" "k3s_devops_sg" {
   }
 
   ingress {
-    description = "Backend Node.js NodePort"
+    description = "Frontend HTTPS NodePort"
+    from_port   = 30443
+    to_port     = 30443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Backend NodePort"
     from_port   = 30500
     to_port     = 30500
     protocol    = "tcp"
@@ -56,24 +62,24 @@ resource "aws_security_group" "k3s_devops_sg" {
   }
 }
 
-# Ορισμός του EC2 Instance (Amazon Linux 2023 - Free Tier)
-resource "aws_instance" "google_diary_k3s" {
-  ami           = "ami-0014ce3e52359afbd" # Amazon Linux 2023 x86_64 (eu-north-1)
-  instance_type = "t3.micro"
-  security_groups = [aws_security_group.k3s_devops_sg.name]
+resource "aws_instance" "k3s_server" {
+  ami                    = "ami-0705384c0b33c194c"
+  instance_type          = "t3.micro"
+  vpc_security_group_ids = [aws_security_group.k3s_sg.id]
 
-  root_block_device {
-    volume_size = 20 # 20GB Free Tier EBS Disk
-    volume_type = "gp3"
-  }
+  # Cloud-Init (Αντικαθιστά πλήρως το Ansible στο Cloud!)
+  user_data = <<-EOF
+              #!/bin/bash
+              dd if=/dev/zero of=/swapfile bs=1M count=2048
+              chmod 600 /swapfile
+              mkswap /swapfile
+              swapon /swapfile
+              echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+              curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb --disable metrics-server --write-kubeconfig-mode 644" sh -
+              chown -R ec2-user:ec2-user /home/ec2-user
+              EOF
 
   tags = {
-    Name        = "GoogleDiary"
-    Environment = "Production"
-    ManagedBy   = "Terraform"
+    Name = "Reminder-K3s-Server"
   }
-}
-
-output "public_ip" {
-  value = aws_instance.google_diary_k3s.public_ip
 }

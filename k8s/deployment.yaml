@@ -1,6 +1,3 @@
-# ==========================================
-# 1. BACKEND DEPLOYMENT & SERVICE (Node.js)
-# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -46,11 +43,7 @@ spec:
     - port: 5000
       targetPort: 5000
       nodePort: 30500
-
 ---
-# ==========================================
-# 2. FRONTEND DEPLOYMENT & SERVICE (Nginx)
-# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -72,7 +65,12 @@ spec:
         image: ghcr.io/GITHUB_USERNAME/reminder-frontend:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 80
+        - name: http
+          containerPort: 80
+          hostPort: 80
+        - name: https
+          containerPort: 443
+          hostPort: 443
         resources:
           requests:
             memory: "32Mi"
@@ -90,6 +88,11 @@ spec:
   selector:
     app: reminder-frontend
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
       nodePort: 30173
+    - name: https
+      port: 443
+      targetPort: 443
+      nodePort: 30443
