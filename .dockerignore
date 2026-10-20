@@ -3,3 +3,5 @@ frontend
 Dockerfile
 docker-compose.yml
 .git
+.env
+k8s

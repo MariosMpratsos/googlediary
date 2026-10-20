@@ -8,6 +8,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: deploy-k3s
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -29,7 +33,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: 4. Build and Push Backend Image
+      - name: 4a. Build Backend Image (local, for testing)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: backend-test:ci
+
+      - name: 4b. Verify Backend Dependencies
+        run: |
+          docker run --rm backend-test:ci node -e "require('dotenv'); require('express'); require('cors'); require('nodemailer'); console.log('All dependencies found')"
+
+      - name: 4c. Push Backend Image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -53,6 +70,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+            KUBECTL="sudo /usr/local/bin/k3s kubectl"
+
             sudo chown -R ec2-user:ec2-user /home/ec2-user
             mkdir -p /home/ec2-user/app
             chmod -R 755 /home/ec2-user/app
@@ -72,20 +91,28 @@ jobs:
 
             sudo chmod 644 /etc/rancher/k3s/k3s.yaml
 
-            # 1. Secret για σύνδεση στο GHCR
-            sudo /usr/local/bin/k3s kubectl create secret docker-registry ghcr-secret \
+            # 1. Secret for pulling from GHCR
+            $KUBECTL create secret docker-registry ghcr-secret \
               --docker-server=ghcr.io \
               --docker-username=${{ github.actor }} \
               --docker-password=${{ secrets.GHCR_PAT }} \
-              --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
+              --dry-run=client -o yaml | $KUBECTL apply -f -
 
-            # 2. Secret για τα EMAIL_USER και EMAIL_PASS από τα GitHub Secrets
-            sudo /usr/local/bin/k3s kubectl create secret generic email-secret \
+            # 2. Secret for EMAIL_USER and EMAIL_PASS
+            $KUBECTL create secret generic email-secret \
               --from-literal=EMAIL_USER="${{ secrets.EMAIL_USER }}" \
               --from-literal=EMAIL_PASS="${{ secrets.EMAIL_PASS }}" \
-              --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
+              --dry-run=client -o yaml | $KUBECTL apply -f -
 
-            echo "${{ env.K8S_MANIFEST_B64 }}" | base64 -d | sudo /usr/local/bin/k3s kubectl apply -f -
+            # 3. Apply manifest
+            echo "${{ env.K8S_MANIFEST_B64 }}" | base64 -d | $KUBECTL apply -f -
 
-            sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-backend
-            sudo /usr/local/bin/k3s kubectl rollout restart deployment/reminder-frontend
+            # 4. Force re-pull of :latest
+            $KUBECTL rollout restart deployment/reminder-backend
+            $KUBECTL rollout restart deployment/reminder-frontend
+
+            # 5. Wait, and fail the pipeline if something crashes
+            $KUBECTL rollout status deployment/reminder-frontend --timeout=120s || { $KUBECTL describe pods -l app=reminder-frontend | tail -30; exit 1; }
+            $KUBECTL rollout status deployment/reminder-backend --timeout=120s || { $KUBECTL logs deployment/reminder-backend --tail=50; exit 1; }
+
+            $KUBECTL get pods
