@@ -11,7 +11,7 @@ function App() {
     setStatus('Sending...');
 
     try {
-      const response = await fetch('http://localhost:5000/api/schedule-reminder', {
+      const response = await fetch('/api/schedule-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, date, emailTo })

@@ -1,40 +1,47 @@
 import React, { useState, useEffect } from 'react';
 
+// Τοπική ημερομηνία YYYY-MM-DD (όχι UTC)
+const toLocalDateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 function App() {
   const [task, setTask] = useState('');
   const [emailTo, setEmailTo] = useState('');
-  
-  // Automatically pre-fill current date and time + 5 minutes
+
+  // Προσυμπλήρωση ημερομηνίας/ώρας: τώρα + 5 λεπτά (πρώτα προσθέτουμε τα 5 λεπτά, μετά υπολογίζουμε ώρα/AMPM)
   const now = new Date();
+  now.setMinutes(now.getMinutes() + 5);
+
   const currentHour24 = now.getHours();
   const initialAMPM = currentHour24 >= 12 ? 'PM' : 'AM';
   let initialHour12 = currentHour24 % 12;
   if (initialHour12 === 0) initialHour12 = 12;
 
-  now.setMinutes(now.getMinutes() + 5);
-
-  const [selectedDate, setSelectedDate] = useState(now.toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(toLocalDateStr(now));
   const [hour, setHour] = useState(String(initialHour12).padStart(2, '0'));
   const [ampm, setAmpm] = useState(initialAMPM);
   const [minute, setMinute] = useState(String(now.getMinutes()).padStart(2, '0'));
   const [second, setSecond] = useState('00');
-  
+
   const [status, setStatus] = useState('');
-  
-  // History log state initialized from LocalStorage
+
+  // History log από LocalStorage (με προστασία από χαλασμένα δεδομένα)
   const [history, setHistory] = useState(() => {
-    const savedHistory = localStorage.getItem('reminder_history');
-    return savedHistory ? JSON.parse(savedHistory) : [];
+    try {
+      const savedHistory = localStorage.getItem('reminder_history');
+      return savedHistory ? JSON.parse(savedHistory) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [filter, setFilter] = useState('All');
 
-  // Save history to LocalStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('reminder_history', JSON.stringify(history));
   }, [history]);
 
-  // Automatically update status to 'Done' when target time is reached
+  // Αυτόματη αλλαγή σε 'Done' όταν περάσει η ώρα
   useEffect(() => {
     const interval = setInterval(() => {
       setHistory(prevHistory => {
@@ -53,7 +60,7 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = toLocalDateStr(new Date());
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -63,7 +70,7 @@ function App() {
       return;
     }
 
-    // Convert 12-hour format + AM/PM to 24-hour format
+    // 12ωρο + AM/PM σε 24ωρο
     let hour24 = Number(hour);
     if (ampm === 'PM' && hour24 < 12) {
       hour24 += 12;
@@ -73,38 +80,49 @@ function App() {
 
     const [year, month, day] = selectedDate.split('-').map(Number);
     const finalDateObject = new Date(
-      year, 
-      month - 1, 
-      day, 
-      hour24, 
-      Number(minute), 
+      year,
+      month - 1,
+      day,
+      hour24,
+      Number(minute),
       Number(second)
     );
 
     const targetTimestamp = finalDateObject.getTime();
-    const currentTimestamp = Date.now();
 
-    if (targetTimestamp <= currentTimestamp) {
+    if (targetTimestamp <= Date.now()) {
       setStatus('Error: This time has already passed! Please choose a future time.');
-      return; 
+      return;
     }
 
     setStatus('Sending...');
 
     try {
-      const response = await fetch('http://localhost:5000/api/schedule-reminder', {
+      const response = await fetch('/api/schedule-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          task, 
-          targetTime: targetTimestamp, 
-          emailTo 
+        body: JSON.stringify({
+          task,
+          targetTime: targetTimestamp,
+          emailTo
         })
       });
 
-      const data = await response.json();
-      setStatus(data.message);
-      
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        // η απάντηση δεν ήταν JSON
+      }
+
+      if (!response.ok) {
+        const msg = data.message || `Error: Server returned ${response.status}`;
+        setStatus(msg.startsWith('Error') ? msg : `Error: ${msg}`);
+        return; // δεν προστίθεται στο history και η φόρμα δεν καθαρίζει
+      }
+
+      setStatus(data.message || 'Reminder scheduled successfully!');
+
       const newLogItem = {
         id: Date.now(),
         task,
@@ -118,17 +136,17 @@ function App() {
       setTask('');
       setEmailTo('');
     } catch (error) {
-      setStatus('Something went wrong! Is the backend running?');
+      setStatus('Error: Something went wrong! Is the backend running?');
     }
   };
 
   const filteredHistory = history.filter(item => {
     const itemDate = new Date(item.timestamp);
     const nowTime = new Date();
-    
+
     const itemDay = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate()).getTime();
     const todayDay = new Date(nowTime.getFullYear(), nowTime.getMonth(), nowTime.getDate()).getTime();
-    
+
     const oneDayMs = 24 * 60 * 60 * 1000;
     const tomorrowDay = todayDay + oneDayMs;
     const dayAfterTomorrowDay = todayDay + (2 * oneDayMs);
@@ -164,33 +182,34 @@ function App() {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '30px 20px', gap: '20px', flexWrap: 'wrap', minHeight: '100vh', backgroundColor: '#1a1a1a', color: 'white', fontFamily: 'sans-serif' }}>
-      
+
       {/* --- FORM CARD --- */}
       <div style={{ width: '100%', maxWidth: '420px', padding: '25px', backgroundColor: '#2a2a2a', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}>
         <h2 style={{ textAlign: 'center', marginBottom: '20px', color: '#fff' }}>Advanced Reminder</h2>
-        
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          
+
           <div>
             <label style={labelStyle}>Task / Reminder</label>
-            <input 
-              type="text" 
-              placeholder="What needs to be done?" 
-              value={task} 
-              onChange={(e) => setTask(e.target.value)} 
-              required 
+            <input
+              type="text"
+              placeholder="What needs to be done?"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              required
+              maxLength={500}
               style={inputStyle}
             />
           </div>
 
           <div>
             <label style={labelStyle}>Date</label>
-            <input 
-              type="date" 
-              value={selectedDate} 
-              onChange={(e) => setSelectedDate(e.target.value)} 
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
               min={todayStr}
-              required 
+              required
               style={inputStyle}
             />
           </div>
@@ -198,41 +217,41 @@ function App() {
           <div>
             <label style={labelStyle}>Time (HH:MM:SS + AM/PM)</label>
             <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-              <input 
-                type="number" 
-                min="1" 
-                max="12" 
-                value={hour} 
-                onChange={(e) => setHour(e.target.value)} 
-                placeholder="HH" 
-                required 
-                style={{ ...inputStyle, textAlign: 'center' }} 
+              <input
+                type="number"
+                min="1"
+                max="12"
+                value={hour}
+                onChange={(e) => setHour(e.target.value)}
+                placeholder="HH"
+                required
+                style={{ ...inputStyle, textAlign: 'center' }}
               />
               <span>:</span>
-              <input 
-                type="number" 
-                min="0" 
-                max="59" 
-                value={minute} 
-                onChange={(e) => setMinute(e.target.value)} 
-                placeholder="MM" 
-                required 
-                style={{ ...inputStyle, textAlign: 'center' }} 
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={minute}
+                onChange={(e) => setMinute(e.target.value)}
+                placeholder="MM"
+                required
+                style={{ ...inputStyle, textAlign: 'center' }}
               />
               <span>:</span>
-              <input 
-                type="number" 
-                min="0" 
-                max="59" 
-                value={second} 
-                onChange={(e) => setSecond(e.target.value)} 
-                placeholder="SS" 
-                required 
-                style={{ ...inputStyle, textAlign: 'center' }} 
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={second}
+                onChange={(e) => setSecond(e.target.value)}
+                placeholder="SS"
+                required
+                style={{ ...inputStyle, textAlign: 'center' }}
               />
-              <select 
-                value={ampm} 
-                onChange={(e) => setAmpm(e.target.value)} 
+              <select
+                value={ampm}
+                onChange={(e) => setAmpm(e.target.value)}
                 style={{ ...inputStyle, padding: '10px 5px', textAlign: 'center', fontWeight: 'bold' }}
               >
                 <option value="AM">AM</option>
@@ -240,15 +259,15 @@ function App() {
               </select>
             </div>
           </div>
-          
+
           <div>
             <label style={labelStyle}>Notification Email</label>
-            <input 
-              type="email" 
-              placeholder="email@example.com" 
-              value={emailTo} 
-              onChange={(e) => setEmailTo(e.target.value)} 
-              required 
+            <input
+              type="email"
+              placeholder="email@example.com"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              required
               style={inputStyle}
             />
           </div>
@@ -259,10 +278,10 @@ function App() {
         </form>
 
         {status && (
-          <div style={{ 
-            marginTop: '20px', 
-            padding: '10px', 
-            borderRadius: '5px', 
+          <div style={{
+            marginTop: '20px',
+            padding: '10px',
+            borderRadius: '5px',
             textAlign: 'center',
             backgroundColor: status.includes('Error') ? 'rgba(255, 77, 77, 0.2)' : 'rgba(76, 175, 80, 0.2)',
             color: status.includes('Error') ? '#ff4d4d' : '#4CAF50',
@@ -280,8 +299,8 @@ function App() {
 
         <div style={{ marginBottom: '15px' }}>
           <label style={labelStyle}>Filter Log</label>
-          <select 
-            value={filter} 
+          <select
+            value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={inputStyle}
           >
@@ -305,15 +324,15 @@ function App() {
                   <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '4px' }}>{item.task}</div>
                   <div style={{ fontSize: '12px', color: '#bbb', marginBottom: '2px' }}>To: {item.emailTo}</div>
                   <div style={{ fontSize: '11px', color: '#888' }}>Scheduled for: {item.dateTime}</div>
-                  <div style={{ 
-                    marginTop: '6px', 
-                    display: 'inline-block', 
-                    padding: '2px 8px', 
-                    borderRadius: '4px', 
-                    fontSize: '10px', 
-                    fontWeight: 'bold', 
-                    backgroundColor: isDone ? 'rgba(76, 175, 80, 0.2)' : 'rgba(0, 123, 255, 0.2)', 
-                    color: isDone ? '#4CAF50' : '#3399ff' 
+                  <div style={{
+                    marginTop: '6px',
+                    display: 'inline-block',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    backgroundColor: isDone ? 'rgba(76, 175, 80, 0.2)' : 'rgba(0, 123, 255, 0.2)',
+                    color: isDone ? '#4CAF50' : '#3399ff'
                   }}>
                     {item.status}
                   </div>
