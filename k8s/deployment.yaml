@@ -78,6 +78,10 @@ spec:
         - name: https
           containerPort: 443
           hostPort: 443
+        volumeMounts:
+        - name: tls
+          mountPath: /etc/nginx/tls
+          readOnly: true
         resources:
           requests:
             memory: "32Mi"
@@ -85,6 +89,10 @@ spec:
           limits:
             memory: "64Mi"
             cpu: "100m"
+      volumes:
+      - name: tls
+        secret:
+          secretName: frontend-tls
 ---
 apiVersion: v1
 kind: Service

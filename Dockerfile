@@ -1,8 +1,9 @@
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-# Άλλαξέ το σε σκέτο npm install ή npm ci (χωρίς --only=production)
-RUN npm install
-COPY . .
+RUN npm ci --omit=dev
+COPY server.js ./
+ENV NODE_ENV=production
 EXPOSE 5000
+USER node
 CMD ["node", "server.js"]
