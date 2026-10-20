@@ -72,11 +72,17 @@ jobs:
 
             sudo chmod 644 /etc/rancher/k3s/k3s.yaml
 
-            # Δημιουργία Secret με το GHCR_PAT για να μην ξαναβγάλει ImagePullBackOff
+            # 1. Secret για σύνδεση στο GHCR
             sudo /usr/local/bin/k3s kubectl create secret docker-registry ghcr-secret \
               --docker-server=ghcr.io \
               --docker-username=${{ github.actor }} \
               --docker-password=${{ secrets.GHCR_PAT }} \
+              --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
+
+            # 2. Secret για τα EMAIL_USER και EMAIL_PASS από τα GitHub Secrets
+            sudo /usr/local/bin/k3s kubectl create secret generic email-secret \
+              --from-literal=EMAIL_USER="${{ secrets.EMAIL_USER }}" \
+              --from-literal=EMAIL_PASS="${{ secrets.EMAIL_PASS }}" \
               --dry-run=client -o yaml | sudo /usr/local/bin/k3s kubectl apply -f -
 
             echo "${{ env.K8S_MANIFEST_B64 }}" | base64 -d | sudo /usr/local/bin/k3s kubectl apply -f -
