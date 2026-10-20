@@ -1,8 +1,8 @@
 FROM node:18-alpine
 WORKDIR /app
 COPY package*.json ./
-# Αφαιρούμε το --only=production για να εγκατασταθούν όλα τα απαραίτητα modules (όπως το dotenv)
-RUN npm ci
+# Άλλαξέ το σε σκέτο npm install ή npm ci (χωρίς --only=production)
+RUN npm install
 COPY . .
 EXPOSE 5000
 CMD ["node", "server.js"]
